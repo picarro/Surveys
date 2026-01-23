@@ -6,6 +6,8 @@ import com.surveys.dto.BreadcrumbResponse;
 import com.surveys.dto.ErrorResponse;
 import com.surveys.dto.FovResponse;
 import com.surveys.dto.LisaResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.ArgumentPreparedStatementSetter;
@@ -20,6 +22,8 @@ import java.util.List;
 
 @Service
 public class StreamingService {
+
+    private static final Logger logger = LoggerFactory.getLogger(StreamingService.class);
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -44,9 +48,7 @@ public class StreamingService {
                 String query = """
                     SELECT
                         "surveySessionId",
-                        "speciesName",
-                        "deviceId",
-                        ST_AsGeoJSON(coordinates)::json AS coordinates
+                        ST_AsGeoJSON(geom)::json AS geometry
                     FROM public.layer_fov_copy
                     WHERE "surveySessionId" = ?
                     ORDER BY ctid
@@ -166,8 +168,8 @@ public class StreamingService {
                 String query = """
                     SELECT
                         "surveySessionId",
-                        ST_AsGeoJSON(coordinates)::json AS coordinates
-                    FROM public.layer_peak
+                        ST_AsGeoJSON(geom)::json AS geometry
+                    FROM public.layer_peak_copy
                     WHERE "surveySessionId" = ?
                     ORDER BY ctid
                     LIMIT ? OFFSET ?
@@ -213,12 +215,10 @@ public class StreamingService {
     private FovResponse mapFovRow(ResultSet rs, int rowNum) throws SQLException {
         FovResponse response = new FovResponse();
         response.setSurveySessionId(rs.getString("surveySessionId"));
-        response.setSpeciesName(rs.getString("speciesName"));
-        response.setDeviceId(rs.getString("deviceId"));
         
-        // Handle JSON coordinates - PostgreSQL returns JSON as string or PGobject
-        Object coordinates = parseCoordinates(rs, "coordinates");
-        response.setCoordinates(coordinates);
+        // Handle JSON geometry - PostgreSQL returns JSON as string or PGobject
+        Object geometry = parseCoordinates(rs, "geometry");
+        response.setGeometry(geometry);
         
         return response;
     }
@@ -238,9 +238,9 @@ public class StreamingService {
         LisaResponse response = new LisaResponse();
         response.setSurveySessionId(rs.getString("surveySessionId"));
         
-        // Handle JSON coordinates
-        Object coordinates = parseCoordinates(rs, "coordinates");
-        response.setCoordinates(coordinates);
+        // Handle JSON geometry
+        Object geometry = parseCoordinates(rs, "geometry");
+        response.setGeometry(geometry);
         
         return response;
     }
@@ -285,6 +285,240 @@ public class StreamingService {
                 // If all parsing fails, return null
                 return null;
             }
+        }
+    }
+
+    /**
+     * Retrieves MVT (Mapbox Vector Tile) data for FOV layer.
+     * 
+     * @param z Zoom level
+     * @param x Tile X coordinate
+     * @param y Tile Y coordinate
+     * @param surveySessionId Survey session ID
+     * @return Binary MVT tile data
+     */
+    public byte[] getFovMvtTile(int z, int x, int y, String surveySessionId) {
+        String query = """
+            SELECT ST_AsMVT(tile, 'fov_layer', 4096, 'geom')
+            FROM (
+              SELECT
+               "surveySessionId",
+                ST_AsMVTGeom(
+                  ST_Transform(geom, 3857),
+                  ST_TileEnvelope(?, ?, ?),
+                  4096,
+                  256,
+                  true
+                ) AS geom
+              FROM public.layer_fov_copy
+              WHERE ST_Transform(geom, 3857) && ST_TileEnvelope(?, ?, ?)
+              AND "surveySessionId" = ?
+            ) tile;
+            """;
+
+        Object[] queryParams = new Object[]{z, x, y, z, x, y, surveySessionId};
+        
+        // Log the query template and parameters for debugging
+        logger.debug("Executing MVT query template:\n{}", query);
+        logger.debug("Query parameters: [z={}, x={}, y={}, z={}, x={}, y={}, surveySessionId='{}']", 
+            z, x, y, z, x, y, surveySessionId);
+        
+        // Log formatted query with parameters (for easier debugging)
+        String formattedQuery = String.format(
+            "SELECT ST_AsMVT(tile, 'fov_layer', 4096, 'geom') " +
+            "FROM (SELECT \"surveySessionId\", ST_AsMVTGeom(ST_Transform(geom, 3857), ST_TileEnvelope(%d, %d, %d), 4096, 256, true) AS geom " +
+            "FROM public.layer_fov_copy WHERE ST_Transform(geom, 3857) && ST_TileEnvelope(%d, %d, %d) AND \"surveySessionId\" = '%s') tile;",
+            z, x, y, z, x, y, surveySessionId
+        );
+        logger.debug("Formatted query (for reference):\n{}", formattedQuery);
+
+        long queryStartTime = System.currentTimeMillis();
+        try {
+            List<byte[]> results = jdbcTemplate.query(
+                query,
+                new ArgumentPreparedStatementSetter(queryParams),
+                (rs, rowNum) -> {
+                    // ST_AsMVT returns bytea (byte array)
+                    byte[] tileData = rs.getBytes(1);
+                    logger.debug("Retrieved MVT tile data, size: {} bytes", tileData != null ? tileData.length : 0);
+                    return tileData;
+                }
+            );
+            
+            long queryExecutionTime = System.currentTimeMillis() - queryStartTime;
+            
+            if (results == null || results.isEmpty()) {
+                logger.debug("MVT query returned no results - z: {}, x: {}, y: {}, surveySessionId: {}, executionTime: {}ms", 
+                    z, x, y, surveySessionId, queryExecutionTime);
+                return null;
+            }
+            
+            byte[] tileData = results.get(0);
+            logger.debug("MVT query completed successfully - z: {}, x: {}, y: {}, surveySessionId: {}, tileSize: {} bytes, executionTime: {}ms", 
+                z, x, y, surveySessionId, tileData != null ? tileData.length : 0, queryExecutionTime);
+            
+            return tileData;
+        } catch (Exception e) {
+            long queryExecutionTime = System.currentTimeMillis() - queryStartTime;
+            logger.error("Database error retrieving MVT tile - z: {}, x: {}, y: {}, surveySessionId: {}, executionTime: {}ms, error: {}", 
+                z, x, y, surveySessionId, queryExecutionTime, e.getMessage(), e);
+            throw new RuntimeException("Error retrieving MVT tile", e);
+        }
+    }
+
+    /**
+     * Retrieves MVT (Mapbox Vector Tile) data for LISA layer.
+     * 
+     * @param z Zoom level
+     * @param x Tile X coordinate
+     * @param y Tile Y coordinate
+     * @param surveySessionId Survey session ID
+     * @return Binary MVT tile data
+     */
+    public byte[] getLisaMvtTile(int z, int x, int y, String surveySessionId) {
+        String query = """
+            SELECT ST_AsMVT(tile, 'lisa_layer', 4096, 'geom')
+            FROM (
+              SELECT
+               "surveySessionId",
+                ST_AsMVTGeom(
+                  ST_Transform(geom, 3857),
+                  ST_TileEnvelope(?, ?, ?),
+                  4096,
+                  256,
+                  true
+                ) AS geom
+              FROM public.layer_peak
+              WHERE ST_Transform(geom, 3857) && ST_TileEnvelope(?, ?, ?)
+              AND "surveySessionId" = ?
+            ) tile;
+            """;
+
+        Object[] queryParams = new Object[]{z, x, y, z, x, y, surveySessionId};
+        
+        // Log the query template and parameters for debugging
+        logger.debug("Executing MVT query template for LISA:\n{}", query);
+        logger.debug("Query parameters: [z={}, x={}, y={}, z={}, x={}, y={}, surveySessionId='{}']", 
+            z, x, y, z, x, y, surveySessionId);
+        
+        // Log formatted query with parameters (for easier debugging)
+        String formattedQuery = String.format(
+            "SELECT ST_AsMVT(tile, 'lisa_layer', 4096, 'geom') " +
+            "FROM (SELECT \"surveySessionId\", ST_AsMVTGeom(ST_Transform(geom, 3857), ST_TileEnvelope(%d, %d, %d), 4096, 256, true) AS geom " +
+            "FROM public.layer_peak WHERE ST_Transform(geom, 3857) && ST_TileEnvelope(%d, %d, %d) AND \"surveySessionId\" = '%s') tile;",
+            z, x, y, z, x, y, surveySessionId
+        );
+        logger.debug("Formatted query (for reference):\n{}", formattedQuery);
+
+        long queryStartTime = System.currentTimeMillis();
+        try {
+            List<byte[]> results = jdbcTemplate.query(
+                query,
+                new ArgumentPreparedStatementSetter(queryParams),
+                (rs, rowNum) -> {
+                    // ST_AsMVT returns bytea (byte array)
+                    byte[] tileData = rs.getBytes(1);
+                    logger.debug("Retrieved MVT tile data for LISA, size: {} bytes", tileData != null ? tileData.length : 0);
+                    return tileData;
+                }
+            );
+            
+            long queryExecutionTime = System.currentTimeMillis() - queryStartTime;
+            
+            if (results == null || results.isEmpty()) {
+                logger.debug("MVT query returned no results for LISA - z: {}, x: {}, y: {}, surveySessionId: {}, executionTime: {}ms", 
+                    z, x, y, surveySessionId, queryExecutionTime);
+                return null;
+            }
+            
+            byte[] tileData = results.get(0);
+            logger.debug("MVT query completed successfully for LISA - z: {}, x: {}, y: {}, surveySessionId: {}, tileSize: {} bytes, executionTime: {}ms", 
+                z, x, y, surveySessionId, tileData != null ? tileData.length : 0, queryExecutionTime);
+            
+            return tileData;
+        } catch (Exception e) {
+            long queryExecutionTime = System.currentTimeMillis() - queryStartTime;
+            logger.error("Database error retrieving MVT tile for LISA - z: {}, x: {}, y: {}, surveySessionId: {}, executionTime: {}ms, error: {}", 
+                z, x, y, surveySessionId, queryExecutionTime, e.getMessage(), e);
+            throw new RuntimeException("Error retrieving MVT tile for LISA", e);
+        }
+    }
+
+    /**
+     * Retrieves MVT (Mapbox Vector Tile) data for Breadcrumb layer.
+     * 
+     * @param z Zoom level
+     * @param x Tile X coordinate
+     * @param y Tile Y coordinate
+     * @param surveySessionId Survey session ID
+     * @return Binary MVT tile data
+     */
+    public byte[] getBreadcrumbMvtTile(int z, int x, int y, String surveySessionId) {
+        String query = """
+            SELECT ST_AsMVT(tile, 'breadcrumb_layer', 4096, 'geom')
+            FROM (
+              SELECT
+               "surveySessionId",
+                ST_AsMVTGeom(
+                  ST_Transform(coordinate, 3857),
+                  ST_TileEnvelope(?, ?, ?),
+                  4096,
+                  256,
+                  true
+                ) AS geom
+              FROM public.layer_breadcrumb
+              WHERE ST_Transform(coordinate, 3857) && ST_TileEnvelope(?, ?, ?)
+              AND "surveySessionId" = ?
+            ) tile;
+            """;
+
+        Object[] queryParams = new Object[]{z, x, y, z, x, y, surveySessionId};
+        
+        // Log the query template and parameters for debugging
+        logger.debug("Executing MVT query template for Breadcrumb:\n{}", query);
+        logger.debug("Query parameters: [z={}, x={}, y={}, z={}, x={}, y={}, surveySessionId='{}']", 
+            z, x, y, z, x, y, surveySessionId);
+        
+        // Log formatted query with parameters (for easier debugging)
+        String formattedQuery = String.format(
+            "SELECT ST_AsMVT(tile, 'breadcrumb_layer', 4096, 'geom') " +
+            "FROM (SELECT \"surveySessionId\", ST_AsMVTGeom(ST_Transform(coordinate, 3857), ST_TileEnvelope(%d, %d, %d), 4096, 256, true) AS geom " +
+            "FROM public.layer_breadcrumb WHERE ST_Transform(coordinate, 3857) && ST_TileEnvelope(%d, %d, %d) AND \"surveySessionId\" = '%s') tile;",
+            z, x, y, z, x, y, surveySessionId
+        );
+        logger.debug("Formatted query (for reference):\n{}", formattedQuery);
+
+        long queryStartTime = System.currentTimeMillis();
+        try {
+            List<byte[]> results = jdbcTemplate.query(
+                query,
+                new ArgumentPreparedStatementSetter(queryParams),
+                (rs, rowNum) -> {
+                    // ST_AsMVT returns bytea (byte array)
+                    byte[] tileData = rs.getBytes(1);
+                    logger.debug("Retrieved MVT tile data for Breadcrumb, size: {} bytes", tileData != null ? tileData.length : 0);
+                    return tileData;
+                }
+            );
+            
+            long queryExecutionTime = System.currentTimeMillis() - queryStartTime;
+            
+            if (results == null || results.isEmpty()) {
+                logger.debug("MVT query returned no results for Breadcrumb - z: {}, x: {}, y: {}, surveySessionId: {}, executionTime: {}ms", 
+                    z, x, y, surveySessionId, queryExecutionTime);
+                return null;
+            }
+            
+            byte[] tileData = results.get(0);
+            logger.debug("MVT query completed successfully for Breadcrumb - z: {}, x: {}, y: {}, surveySessionId: {}, tileSize: {} bytes, executionTime: {}ms", 
+                z, x, y, surveySessionId, tileData != null ? tileData.length : 0, queryExecutionTime);
+            
+            return tileData;
+        } catch (Exception e) {
+            long queryExecutionTime = System.currentTimeMillis() - queryStartTime;
+            logger.error("Database error retrieving MVT tile for Breadcrumb - z: {}, x: {}, y: {}, surveySessionId: {}, executionTime: {}ms, error: {}", 
+                z, x, y, surveySessionId, queryExecutionTime, e.getMessage(), e);
+            throw new RuntimeException("Error retrieving MVT tile for Breadcrumb", e);
         }
     }
 }

@@ -6,23 +6,15 @@ public class FovResponse {
     @JsonProperty("surveySessionId")
     private String surveySessionId;
     
-    @JsonProperty("speciesName")
-    private String speciesName;
-    
-    @JsonProperty("deviceId")
-    private String deviceId;
-    
-    @JsonProperty("coordinates")
-    private Object coordinates;
+    @JsonProperty("geometry")
+    private Object geometry;
 
     public FovResponse() {
     }
 
-    public FovResponse(String surveySessionId, String speciesName, String deviceId, Object coordinates) {
+    public FovResponse(String surveySessionId, Object geometry) {
         this.surveySessionId = surveySessionId;
-        this.speciesName = speciesName;
-        this.deviceId = deviceId;
-        this.coordinates = coordinates;
+        this.geometry = geometry;
     }
 
     public String getSurveySessionId() {
@@ -33,28 +25,12 @@ public class FovResponse {
         this.surveySessionId = surveySessionId;
     }
 
-    public String getSpeciesName() {
-        return speciesName;
+    public Object getGeometry() {
+        return geometry;
     }
 
-    public void setSpeciesName(String speciesName) {
-        this.speciesName = speciesName;
-    }
-
-    public String getDeviceId() {
-        return deviceId;
-    }
-
-    public void setDeviceId(String deviceId) {
-        this.deviceId = deviceId;
-    }
-
-    public Object getCoordinates() {
-        return coordinates;
-    }
-
-    public void setCoordinates(Object coordinates) {
-        this.coordinates = coordinates;
+    public void setGeometry(Object geometry) {
+        this.geometry = geometry;
     }
 }
 

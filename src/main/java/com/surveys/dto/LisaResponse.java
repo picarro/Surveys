@@ -6,15 +6,15 @@ public class LisaResponse {
     @JsonProperty("surveySessionId")
     private String surveySessionId;
     
-    @JsonProperty("coordinates")
-    private Object coordinates;
+    @JsonProperty("geometry")
+    private Object geometry;
 
     public LisaResponse() {
     }
 
-    public LisaResponse(String surveySessionId, Object coordinates) {
+    public LisaResponse(String surveySessionId, Object geometry) {
         this.surveySessionId = surveySessionId;
-        this.coordinates = coordinates;
+        this.geometry = geometry;
     }
 
     public String getSurveySessionId() {
@@ -25,12 +25,12 @@ public class LisaResponse {
         this.surveySessionId = surveySessionId;
     }
 
-    public Object getCoordinates() {
-        return coordinates;
+    public Object getGeometry() {
+        return geometry;
     }
 
-    public void setCoordinates(Object coordinates) {
-        this.coordinates = coordinates;
+    public void setGeometry(Object geometry) {
+        this.geometry = geometry;
     }
 }
 

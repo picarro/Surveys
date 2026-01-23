@@ -1,0 +1,16 @@
+{"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"StreamingService.java:304","message":"getFovMvtTile entry","data":{"z":11,"x":1526,"y":892,"surveySessionId":"6321d911-496c-4312-9910-fe3929ad255d"},"timestamp":1769173284536}
+{"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"StreamingService.java:310","message":"geom column SRID check","data":{"srid":4326},"timestamp":1769173287311}
+{"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"StreamingService.java:320","message":"Row count WITHOUT transform in WHERE","data":{"count":0,"z":11,"x":1526,"y":892},"timestamp":1769173287562}
+{"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"StreamingService.java:330","message":"Row count WITH transform in WHERE","data":{"count":73676,"z":11,"x":1526,"y":892},"timestamp":1769173287972}
+{"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"StreamingService.java:360","message":"Inner query row count","data":{"count":0},"timestamp":1769173288221}
+{"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"StreamingService.java:375","message":"ST_AsMVT result","data":{"tileDataSize":0,"isNull":false},"timestamp":1769173288478}
+{"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"StreamingService.java:385","message":"Query results","data":{"resultsSize":1,"isEmpty":false,"executionTime":507},"timestamp":1769173288479}
+{"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"StreamingService.java:400","message":"Returning tile data","data":{"tileSize":0},"timestamp":1769173288480}
+{"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"StreamingService.java:304","message":"getFovMvtTile entry","data":{"z":11,"x":1526,"y":892,"surveySessionId":"6321d911-496c-4312-9910-fe3929ad255d"},"timestamp":1769173379944}
+{"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"StreamingService.java:310","message":"geom column SRID check","data":{"srid":4326},"timestamp":1769173382399}
+{"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"StreamingService.java:320","message":"Row count WITHOUT transform in WHERE","data":{"count":0,"z":11,"x":1526,"y":892},"timestamp":1769173382653}
+{"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"StreamingService.java:330","message":"Row count WITH transform in WHERE","data":{"count":73676,"z":11,"x":1526,"y":892},"timestamp":1769173383042}
+{"sessionId":"debug-session","runId":"post-fix","hypothesisId":"D","location":"StreamingService.java:360","message":"Inner query row count","data":{"count":73676},"timestamp":1769173383405}
+{"sessionId":"debug-session","runId":"post-fix","hypothesisId":"E","location":"StreamingService.java:375","message":"ST_AsMVT result","data":{"tileDataSize":958941,"isNull":false},"timestamp":1769173386797}
+{"sessionId":"debug-session","runId":"post-fix","hypothesisId":"E","location":"StreamingService.java:385","message":"Query results","data":{"resultsSize":1,"isEmpty":false,"executionTime":3756},"timestamp":1769173386798}
+{"sessionId":"debug-session","runId":"post-fix","hypothesisId":"E","location":"StreamingService.java:400","message":"Returning tile data","data":{"tileSize":958941},"timestamp":1769173386798}
