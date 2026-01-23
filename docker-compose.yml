@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  # Spring Boot Application Service
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mobile-utv-surveys-service
+    environment:
+      PORT: 3000
+      DB_HOST: sc-fenceline-int-dev3.corp.picarro.com
+      DB_PORT: 5433
+      DB_NAME: refinery_restored
+      DB_USER: ts_user
+      DB_PASSWORD: ts_password
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
