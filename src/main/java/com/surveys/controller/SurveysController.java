@@ -41,7 +41,8 @@ public class SurveysController {
     @GetMapping(value = "/api/fov", produces = "text/event-stream")
     public SseEmitter getFov(
             @RequestParam(required = false) String surveySessionId,
-            @RequestParam(required = false, defaultValue = "100000") int limit) {
+            @RequestParam(required = false, defaultValue = "100000") int limit,
+            @RequestParam(required = false, defaultValue = "100") int batchSize) {
         
         SseEmitter emitter = new SseEmitter(3600000L); // 1 hour timeout
         
@@ -75,10 +76,24 @@ public class SurveysController {
             return emitter;
         }
 
+        if (batchSize < 1) {
+            try {
+                emitter.send(SseEmitter.event()
+                    .name("error")
+                    .data(objectMapper.writeValueAsString(
+                        new ErrorResponse("batchSize must be a positive integer", null)
+                    )));
+                emitter.complete();
+            } catch (IOException e) {
+                emitter.completeWithError(e);
+            }
+            return emitter;
+        }
+
         // Execute streaming in a separate thread
         executorService.execute(() -> {
             try {
-                streamingService.streamFovData(surveySessionId, limit, emitter);
+                streamingService.streamFovData(surveySessionId, limit, batchSize, emitter);
             } catch (Exception e) {
                 emitter.completeWithError(e);
             }

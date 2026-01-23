@@ -2,6 +2,7 @@ package com.surveys.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.surveys.dto.BatchResponse;
 import com.surveys.dto.BreadcrumbResponse;
 import com.surveys.dto.ErrorResponse;
 import com.surveys.dto.FovResponse;
@@ -19,6 +20,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Map;
 import java.util.List;
+import java.util.ArrayList;
 
 @Service
 public class StreamingService {
@@ -31,17 +33,18 @@ public class StreamingService {
     @Autowired
     private ObjectMapper objectMapper;
 
-    public void streamFovData(String surveySessionId, int limit, SseEmitter emitter) throws IOException {
-        final int batchSize = 1000;
+    public void streamFovData(String surveySessionId, int limit, int batchSize, SseEmitter emitter) throws IOException {
+        final int dbBatchSize = 1000; // Database query batch size
         int offset = 0;
         int totalRows = 0;
+        List<FovResponse> emitBatch = new ArrayList<>();
 
         try {
             while (totalRows < limit) {
                 int remainingLimit = limit - totalRows;
-                int currentBatchSize = Math.min(batchSize, remainingLimit);
+                int currentDbBatchSize = Math.min(dbBatchSize, remainingLimit);
 
-                if (currentBatchSize <= 0) {
+                if (currentDbBatchSize <= 0) {
                     break;
                 }
 
@@ -57,7 +60,7 @@ public class StreamingService {
 
                 List<FovResponse> results = jdbcTemplate.query(
                     query,
-                    new ArgumentPreparedStatementSetter(new Object[]{surveySessionId, currentBatchSize, offset}),
+                    new ArgumentPreparedStatementSetter(new Object[]{surveySessionId, currentDbBatchSize, offset}),
                     this::mapFovRow
                 );
 
@@ -65,18 +68,44 @@ public class StreamingService {
                     break;
                 }
 
+                // Add results to emit batch
                 for (FovResponse row : results) {
-                    emitter.send(SseEmitter.event()
-                        .data(objectMapper.writeValueAsString(row)));
+                    emitBatch.add(row);
                     totalRows++;
+
+                    // Emit batch when it reaches the specified size
+                    if (emitBatch.size() >= batchSize) {
+                        BatchResponse<FovResponse> batchResponse = new BatchResponse<>(
+                            new ArrayList<>(emitBatch),
+                            totalRows
+                        );
+                        emitter.send(SseEmitter.event()
+                            .data(objectMapper.writeValueAsString(batchResponse)));
+                        emitBatch.clear();
+                    }
+
+                    if (totalRows >= limit) {
+                        break;
+                    }
                 }
 
                 offset += results.size();
 
-                if (totalRows >= limit || results.size() < batchSize) {
+                if (totalRows >= limit || results.size() < dbBatchSize) {
                     break;
                 }
             }
+
+            // Emit any remaining records as final batch
+            if (!emitBatch.isEmpty()) {
+                BatchResponse<FovResponse> batchResponse = new BatchResponse<>(
+                    emitBatch,
+                    totalRows
+                );
+                emitter.send(SseEmitter.event()
+                    .data(objectMapper.writeValueAsString(batchResponse)));
+            }
+
             emitter.complete();
         } catch (Exception e) {
             try {
@@ -93,15 +122,17 @@ public class StreamingService {
     }
 
     public void streamBreadcrumbData(String surveySessionId, int limit, int batchSize, SseEmitter emitter) throws IOException {
+        final int dbBatchSize = 1000; // Database query batch size
         int offset = 0;
         int totalRows = 0;
+        List<BreadcrumbResponse> emitBatch = new ArrayList<>();
 
         try {
             while (totalRows < limit) {
                 int remainingLimit = limit - totalRows;
-                int currentBatchSize = Math.min(batchSize, remainingLimit);
+                int currentDbBatchSize = Math.min(dbBatchSize, remainingLimit);
 
-                if (currentBatchSize <= 0) {
+                if (currentDbBatchSize <= 0) {
                     break;
                 }
 
@@ -117,7 +148,7 @@ public class StreamingService {
 
                 List<BreadcrumbResponse> results = jdbcTemplate.query(
                     query,
-                    new ArgumentPreparedStatementSetter(new Object[]{surveySessionId, currentBatchSize, offset}),
+                    new ArgumentPreparedStatementSetter(new Object[]{surveySessionId, currentDbBatchSize, offset}),
                     this::mapBreadcrumbRow
                 );
 
@@ -125,18 +156,44 @@ public class StreamingService {
                     break;
                 }
 
+                // Add results to emit batch
                 for (BreadcrumbResponse row : results) {
-                    emitter.send(SseEmitter.event()
-                        .data(objectMapper.writeValueAsString(row)));
+                    emitBatch.add(row);
                     totalRows++;
+
+                    // Emit batch when it reaches the specified size
+                    if (emitBatch.size() >= batchSize) {
+                        BatchResponse<BreadcrumbResponse> batchResponse = new BatchResponse<>(
+                            new ArrayList<>(emitBatch),
+                            totalRows
+                        );
+                        emitter.send(SseEmitter.event()
+                            .data(objectMapper.writeValueAsString(batchResponse)));
+                        emitBatch.clear();
+                    }
+
+                    if (totalRows >= limit) {
+                        break;
+                    }
                 }
 
                 offset += results.size();
 
-                if (totalRows >= limit || results.size() < batchSize) {
+                if (totalRows >= limit || results.size() < dbBatchSize) {
                     break;
                 }
             }
+
+            // Emit any remaining records as final batch
+            if (!emitBatch.isEmpty()) {
+                BatchResponse<BreadcrumbResponse> batchResponse = new BatchResponse<>(
+                    emitBatch,
+                    totalRows
+                );
+                emitter.send(SseEmitter.event()
+                    .data(objectMapper.writeValueAsString(batchResponse)));
+            }
+
             emitter.complete();
         } catch (Exception e) {
             try {
@@ -153,15 +210,17 @@ public class StreamingService {
     }
 
     public void streamLisaData(String surveySessionId, int limit, int batchSize, SseEmitter emitter) throws IOException {
+        final int dbBatchSize = 1000; // Database query batch size
         int offset = 0;
         int totalRows = 0;
+        List<LisaResponse> emitBatch = new ArrayList<>();
 
         try {
             while (totalRows < limit) {
                 int remainingLimit = limit - totalRows;
-                int currentBatchSize = Math.min(batchSize, remainingLimit);
+                int currentDbBatchSize = Math.min(dbBatchSize, remainingLimit);
 
-                if (currentBatchSize <= 0) {
+                if (currentDbBatchSize <= 0) {
                     break;
                 }
 
@@ -177,7 +236,7 @@ public class StreamingService {
 
                 List<LisaResponse> results = jdbcTemplate.query(
                     query,
-                    new ArgumentPreparedStatementSetter(new Object[]{surveySessionId, currentBatchSize, offset}),
+                    new ArgumentPreparedStatementSetter(new Object[]{surveySessionId, currentDbBatchSize, offset}),
                     this::mapLisaRow
                 );
 
@@ -185,18 +244,44 @@ public class StreamingService {
                     break;
                 }
 
+                // Add results to emit batch
                 for (LisaResponse row : results) {
-                    emitter.send(SseEmitter.event()
-                        .data(objectMapper.writeValueAsString(row)));
+                    emitBatch.add(row);
                     totalRows++;
+
+                    // Emit batch when it reaches the specified size
+                    if (emitBatch.size() >= batchSize) {
+                        BatchResponse<LisaResponse> batchResponse = new BatchResponse<>(
+                            new ArrayList<>(emitBatch),
+                            totalRows
+                        );
+                        emitter.send(SseEmitter.event()
+                            .data(objectMapper.writeValueAsString(batchResponse)));
+                        emitBatch.clear();
+                    }
+
+                    if (totalRows >= limit) {
+                        break;
+                    }
                 }
 
                 offset += results.size();
 
-                if (totalRows >= limit || results.size() < batchSize) {
+                if (totalRows >= limit || results.size() < dbBatchSize) {
                     break;
                 }
             }
+
+            // Emit any remaining records as final batch
+            if (!emitBatch.isEmpty()) {
+                BatchResponse<LisaResponse> batchResponse = new BatchResponse<>(
+                    emitBatch,
+                    totalRows
+                );
+                emitter.send(SseEmitter.event()
+                    .data(objectMapper.writeValueAsString(batchResponse)));
+            }
+
             emitter.complete();
         } catch (Exception e) {
             try {
