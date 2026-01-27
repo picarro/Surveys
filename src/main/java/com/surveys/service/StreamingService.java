@@ -473,7 +473,7 @@ public class StreamingService {
                   256,
                   true
                 ) AS geom
-              FROM public.layer_peak
+              FROM public.layer_peak_copy
               WHERE ST_Transform(geom, 3857) && ST_TileEnvelope(?, ?, ?)
               AND "surveySessionId" = ?
             ) tile;
@@ -490,7 +490,7 @@ public class StreamingService {
         String formattedQuery = String.format(
             "SELECT ST_AsMVT(tile, 'lisa_layer', 4096, 'geom') " +
             "FROM (SELECT \"surveySessionId\", ST_AsMVTGeom(ST_Transform(geom, 3857), ST_TileEnvelope(%d, %d, %d), 4096, 256, true) AS geom " +
-            "FROM public.layer_peak WHERE ST_Transform(geom, 3857) && ST_TileEnvelope(%d, %d, %d) AND \"surveySessionId\" = '%s') tile;",
+            "FROM public.layer_peak_copy WHERE ST_Transform(geom, 3857) && ST_TileEnvelope(%d, %d, %d) AND \"surveySessionId\" = '%s') tile;",
             z, x, y, z, x, y, surveySessionId
         );
         logger.debug("Formatted query (for reference):\n{}", formattedQuery);
@@ -545,14 +545,14 @@ public class StreamingService {
               SELECT
                "surveySessionId",
                 ST_AsMVTGeom(
-                  ST_Transform(coordinate, 3857),
+                  ST_Transform(coordinates, 3857),
                   ST_TileEnvelope(?, ?, ?),
                   4096,
                   256,
                   true
                 ) AS geom
               FROM public.layer_breadcrumb
-              WHERE ST_Transform(coordinate, 3857) && ST_TileEnvelope(?, ?, ?)
+              WHERE ST_Transform(coordinates, 3857) && ST_TileEnvelope(?, ?, ?)
               AND "surveySessionId" = ?
             ) tile;
             """;
@@ -567,8 +567,8 @@ public class StreamingService {
         // Log formatted query with parameters (for easier debugging)
         String formattedQuery = String.format(
             "SELECT ST_AsMVT(tile, 'breadcrumb_layer', 4096, 'geom') " +
-            "FROM (SELECT \"surveySessionId\", ST_AsMVTGeom(ST_Transform(coordinate, 3857), ST_TileEnvelope(%d, %d, %d), 4096, 256, true) AS geom " +
-            "FROM public.layer_breadcrumb WHERE ST_Transform(coordinate, 3857) && ST_TileEnvelope(%d, %d, %d) AND \"surveySessionId\" = '%s') tile;",
+            "FROM (SELECT \"surveySessionId\", ST_AsMVTGeom(ST_Transform(coordinates, 3857), ST_TileEnvelope(%d, %d, %d), 4096, 256, true) AS geom " +
+            "FROM public.layer_breadcrumb WHERE ST_Transform(coordinates, 3857) && ST_TileEnvelope(%d, %d, %d) AND \"surveySessionId\" = '%s') tile;",
             z, x, y, z, x, y, surveySessionId
         );
         logger.debug("Formatted query (for reference):\n{}", formattedQuery);

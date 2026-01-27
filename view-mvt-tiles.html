@@ -38,11 +38,33 @@
       border: 1px solid #ddd;
       border-radius: 3px;
     }
+    .controls input[type="checkbox"] {
+      width: auto;
+      margin-right: 8px;
+    }
     .controls label {
       display: block;
       margin-top: 10px;
       font-weight: bold;
       font-size: 12px;
+    }
+    .layer-options {
+      margin-top: 5px;
+    }
+    .layer-option {
+      display: flex;
+      align-items: center;
+      margin: 5px 0;
+      padding: 5px;
+      background: #f9f9f9;
+      border-radius: 3px;
+    }
+    .layer-option label {
+      margin: 0;
+      font-weight: normal;
+      font-size: 13px;
+      cursor: pointer;
+      flex: 1;
     }
     .controls button {
       width: 100%;
@@ -87,10 +109,21 @@
   <label>Survey Session ID:</label>
   <input type="text" id="surveySessionId" value="6321d911-496c-4312-9910-fe3929ad255d" placeholder="Enter survey session ID">
   
-  <label>Layer Type:</label>
-  <select id="layerType">
-    <option value="fov">FOV</option>
-  </select>
+  <label>Layers (Select multiple):</label>
+  <div class="layer-options">
+    <div class="layer-option">
+      <input type="checkbox" id="layer-fov" value="fov" checked>
+      <label for="layer-fov">FOV</label>
+    </div>
+    <div class="layer-option">
+      <input type="checkbox" id="layer-breadcrumb" value="breadcrumb" checked>
+      <label for="layer-breadcrumb">Breadcrumb</label>
+    </div>
+    <div class="layer-option">
+      <input type="checkbox" id="layer-lisa" value="lisa" checked>
+      <label for="layer-lisa">LISA</label>
+    </div>
+  </div>
   
   <label>Base URL:</label>
   <input type="text" id="baseUrl" value="http://localhost:3000/api/mvt" placeholder="Base URL for MVT endpoint">
@@ -106,6 +139,7 @@
 
 <script>
 let map;
+const availableLayers = ['fov', 'breadcrumb', 'lisa'];
 
 function addStatus(message, type = 'info') {
   const statusDiv = document.getElementById('status');
@@ -120,63 +154,85 @@ function addStatus(message, type = 'info') {
   }
 }
 
+function getSelectedLayers() {
+  return availableLayers.filter(layer => {
+    const checkbox = document.getElementById(`layer-${layer}`);
+    return checkbox && checkbox.checked;
+  });
+}
+
 function initializeMap() {
   const surveySessionId = document.getElementById('surveySessionId').value;
-  const layerType = document.getElementById('layerType').value;
   const baseUrl = document.getElementById('baseUrl').value;
+  const selectedLayers = getSelectedLayers();
   
   if (!surveySessionId || surveySessionId.trim() === '') {
     addStatus('Error: Survey Session ID is required', 'error');
     return;
   }
   
-  const tileUrl = `${baseUrl}/${layerType}/{z}/{x}/{y}?surveySessionId=${surveySessionId}`;
-  addStatus(`Initializing map with tile URL: ${tileUrl}`, 'info');
+  if (selectedLayers.length === 0) {
+    addStatus('Error: Please select at least one layer', 'error');
+    return;
+  }
+  
+  addStatus(`Initializing map with layers: ${selectedLayers.join(', ')}`, 'info');
+  
+  // Build sources and layers
+  const sources = {
+    "osm": {
+      type: "raster",
+      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      tileSize: 256,
+      attribution: "© OpenStreetMap contributors"
+    }
+  };
+  
+  const layers = [
+    {
+      id: "osm-layer",
+      type: "raster",
+      source: "osm",
+      minzoom: 0,
+      maxzoom: 22
+    }
+  ];
+  
+  // Add sources and layers for each selected layer type
+  selectedLayers.forEach(layerType => {
+    const tileUrl = `${baseUrl}/${layerType}/{z}/{x}/{y}?surveySessionId=${surveySessionId}`;
+    sources[layerType] = {
+      type: "vector",
+      tiles: [tileUrl],
+      minzoom: 14,
+      maxzoom: 18
+    };
+    
+    layers.push({
+      id: `${layerType}-layer`,
+      type: "fill",
+      source: layerType,
+      "source-layer": `${layerType}_layer`,
+      paint: {
+        "fill-color": getLayerColor(layerType),
+        "fill-opacity": 0.5,
+        "fill-outline-color": "#000000"
+      },
+      minzoom: 14,
+      maxzoom: 18
+    });
+  });
   
   // Add OpenStreetMap as base layer
   map = new maplibregl.Map({
     container: "map",
     style: {
       version: 8,
-      sources: {
-        "osm": {
-          type: "raster",
-          tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-          tileSize: 256,
-          attribution: "© OpenStreetMap contributors"
-        },
-        [layerType]: {
-          type: "vector",
-          tiles: [tileUrl],
-          minzoom: 14,
-          maxzoom: 18
-        }
-      },
-      layers: [
-        {
-          id: "osm-layer",
-          type: "raster",
-          source: "osm",
-          minzoom: 0,
-          maxzoom: 22
-        },
-        {
-          id: `${layerType}-layer`,
-          type: "fill",
-          source: layerType,
-          "source-layer": `${layerType}_layer`,
-          paint: {
-            "fill-color": getLayerColor(layerType),
-            "fill-opacity": 0.6,
-            "fill-outline-color": "#000000"
-          },
-          minzoom: 14,
-          maxzoom: 18
-        }
-      ]
+      sources: sources,
+      layers: layers
     },
-    center: [88.402284538, 22.574099812],
-    zoom: 15
+    center: [ 88.40767190890205, 22.582022906093922],
+    zoom: 14
   });
 
   map.on('error', (e) => {
@@ -188,64 +244,61 @@ function initializeMap() {
     addStatus('Map loaded successfully', 'success');
     console.log('Map loaded successfully');
     
-    // Check if source has data
-    const source = map.getSource(layerType);
-    if (source) {
-      addStatus(`Source "${layerType}" loaded`, 'success');
-    }
-  });
-
-  map.on('data', (e) => {
-    if (e.dataType === 'source' && e.sourceId === layerType) {
-      if (e.isSourceLoaded) {
-        addStatus(`Source "${layerType}" data loaded`, 'success');
+    // Check if sources have data
+    selectedLayers.forEach(layerType => {
+      const source = map.getSource(layerType);
+      if (source) {
+        addStatus(`Source "${layerType}" loaded`, 'success');
       }
-    }
+    });
   });
 
   map.on('sourcedata', (e) => {
-    if (e.sourceId === layerType) {
+    if (selectedLayers.includes(e.sourceId)) {
       if (e.isSourceLoaded) {
-        addStatus(`Source "${layerType}" loaded`, 'success');
+        addStatus(`Source "${e.sourceId}" loaded`, 'success');
       }
     }
   });
 
   // Monitor tile loading
   map.on('data', (e) => {
-    if (e.dataType === 'source' && e.sourceId === layerType) {
+    if (e.dataType === 'source' && selectedLayers.includes(e.sourceId)) {
       if (e.tile) {
         const tile = e.tile;
         if (tile.state === 'loaded') {
-          addStatus(`Tile loaded: z=${tile.tileID.z}, x=${tile.tileID.x}, y=${tile.tileID.y}`, 'success');
+          addStatus(`Tile loaded [${e.sourceId}]: z=${tile.tileID.z}, x=${tile.tileID.x}, y=${tile.tileID.y}`, 'success');
         } else if (tile.state === 'errored') {
-          addStatus(`Tile error: z=${tile.tileID.z}, x=${tile.tileID.x}, y=${tile.tileID.y}`, 'error');
+          addStatus(`Tile error [${e.sourceId}]: z=${tile.tileID.z}, x=${tile.tileID.x}, y=${tile.tileID.y}`, 'error');
         }
       }
     }
   });
 
-  // Test tile URL directly
-  const testUrl = tileUrl.replace('{z}', '15').replace('{x}', '24430').replace('{y}', '14273');
-  addStatus(`Testing tile URL: ${testUrl}`, 'info');
-  
-  fetch(testUrl)
-    .then(response => {
-      if (response.ok) {
-        addStatus(`Tile fetch successful: ${response.status} ${response.statusText}, Content-Type: ${response.headers.get('Content-Type')}`, 'success');
-        return response.arrayBuffer();
-      } else {
-        addStatus(`Tile fetch failed: ${response.status} ${response.statusText}`, 'error');
-        throw new Error(`HTTP ${response.status}`);
-      }
-    })
-    .then(buffer => {
-      addStatus(`Tile data received: ${buffer.byteLength} bytes`, 'success');
-    })
-    .catch(error => {
-      addStatus(`Tile fetch error: ${error.message}`, 'error');
-      console.error('Tile fetch error:', error);
-    });
+  // Test tile URLs directly for selected layers
+  selectedLayers.forEach(layerType => {
+    const tileUrl = `${baseUrl}/${layerType}/{z}/{x}/{y}?surveySessionId=${surveySessionId}`;
+    const testUrl = tileUrl.replace('{z}', '15').replace('{x}', '1600').replace('{y}', '1300');
+    addStatus(`Testing ${layerType} tile URL: ${testUrl}`, 'info');
+    
+    fetch(testUrl)
+      .then(response => {
+        if (response.ok) {
+          addStatus(`${layerType} tile fetch successful: ${response.status} ${response.statusText}`, 'success');
+          return response.arrayBuffer();
+        } else {
+          addStatus(`${layerType} tile fetch failed: ${response.status} ${response.statusText}`, 'error');
+          throw new Error(`HTTP ${response.status}`);
+        }
+      })
+      .then(buffer => {
+        addStatus(`${layerType} tile data received: ${buffer.byteLength} bytes`, 'success');
+      })
+      .catch(error => {
+        addStatus(`${layerType} tile fetch error: ${error.message}`, 'error');
+        console.error(`${layerType} tile fetch error:`, error);
+      });
+  });
 }
 
 function getLayerColor(layerType) {
@@ -264,6 +317,16 @@ function updateMap() {
   document.getElementById('status').innerHTML = '';
   initializeMap();
 }
+
+// Add event listeners to checkboxes to update map when selection changes
+availableLayers.forEach(layer => {
+  const checkbox = document.getElementById(`layer-${layer}`);
+  if (checkbox) {
+    checkbox.addEventListener('change', () => {
+      updateMap();
+    });
+  }
+});
 
 // Initialize map on page load
 initializeMap();
