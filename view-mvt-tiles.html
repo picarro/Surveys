@@ -102,6 +102,26 @@
     .status-item.info {
       color: #1976d2;
     }
+    .popup {
+      position: absolute;
+      background: white;
+      padding: 8px 12px;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      font-size: 12px;
+      pointer-events: none;
+      z-index: 2000;
+      display: none;
+      max-width: 250px;
+    }
+    .popup-title {
+      font-weight: bold;
+      margin-bottom: 4px;
+      color: #333;
+    }
+    .popup-content {
+      color: #666;
+    }
   </style>
 </head>
 <body>
@@ -136,6 +156,10 @@
 </div>
 
 <div id="map"></div>
+<div id="popup" class="popup">
+  <div class="popup-title">LISA Polygon</div>
+  <div class="popup-content" id="popup-content"></div>
+</div>
 
 <script>
 let map;
@@ -251,6 +275,11 @@ function initializeMap() {
         addStatus(`Source "${layerType}" loaded`, 'success');
       }
     });
+    
+    // Add hover functionality for LISA layer
+    if (selectedLayers.includes('lisa')) {
+      setupLisaHover();
+    }
   });
 
   map.on('sourcedata', (e) => {
@@ -308,6 +337,47 @@ function getLayerColor(layerType) {
     'breadcrumb': '#0000ff'
   };
   return colors[layerType] || '#888888';
+}
+
+function setupLisaHover() {
+  const popup = document.getElementById('popup');
+  const popupContent = document.getElementById('popup-content');
+  
+  // Change cursor to pointer when hovering over LISA layer
+  map.on('mouseenter', 'lisa-layer', () => {
+    map.getCanvas().style.cursor = 'pointer';
+  });
+  
+  map.on('mouseleave', 'lisa-layer', () => {
+    map.getCanvas().style.cursor = '';
+    popup.style.display = 'none';
+  });
+  
+  // Show popup with time on mouse move over LISA layer
+  map.on('mousemove', 'lisa-layer', (e) => {
+    const features = map.queryRenderedFeatures(e.point, {
+      layers: ['lisa-layer']
+    });
+    
+    if (features.length > 0) {
+      const feature = features[0];
+      const properties = feature.properties || {};
+      const time = properties.time;
+      
+      if (time !== undefined && time !== null) {
+        // Display time as epoch value
+        popupContent.textContent = `Time (epoch): ${time}`;
+        popup.style.display = 'block';
+        
+        // Position popup near cursor
+        const coordinates = e.lngLat;
+        popup.style.left = (e.point.x + 10) + 'px';
+        popup.style.top = (e.point.y - 10) + 'px';
+      } else {
+        popup.style.display = 'none';
+      }
+    }
+  });
 }
 
 function updateMap() {

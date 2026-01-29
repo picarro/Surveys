@@ -466,6 +466,7 @@ public class StreamingService {
             FROM (
               SELECT
                "surveySessionId",
+               "time",
                 ST_AsMVTGeom(
                   ST_Transform(geom, 3857),
                   ST_TileEnvelope(?, ?, ?),
@@ -489,7 +490,7 @@ public class StreamingService {
         // Log formatted query with parameters (for easier debugging)
         String formattedQuery = String.format(
             "SELECT ST_AsMVT(tile, 'lisa_layer', 4096, 'geom') " +
-            "FROM (SELECT \"surveySessionId\", ST_AsMVTGeom(ST_Transform(geom, 3857), ST_TileEnvelope(%d, %d, %d), 4096, 256, true) AS geom " +
+            "FROM (SELECT \"surveySessionId\", \"time\", ST_AsMVTGeom(ST_Transform(geom, 3857), ST_TileEnvelope(%d, %d, %d), 4096, 256, true) AS geom " +
             "FROM public.layer_peak_copy WHERE ST_Transform(geom, 3857) && ST_TileEnvelope(%d, %d, %d) AND \"surveySessionId\" = '%s') tile;",
             z, x, y, z, x, y, surveySessionId
         );
